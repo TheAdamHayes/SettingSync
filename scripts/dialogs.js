@@ -105,8 +105,8 @@ function dialogRoot(event, dialog) {
  * Full flow for receiving a state (a master snapshot or a backup):
  * preview with tick boxes -> "Are you sure?" -> backup -> apply -> reload.
  */
-export async function reviewAndApply(masterState, { title, intro = "", snapshotId = null, reason = "sync", applyLabel = "Apply ticked changes" } = {}) {
-  const diff = diffAgainstLocal(masterState);
+export async function reviewAndApply(masterState, { title, intro = "", snapshotId = null, reason = "sync", applyLabel = "Apply ticked changes", sourceExclusions = [] } = {}) {
+  const diff = diffAgainstLocal(masterState, sourceExclusions);
   const total = countChanges(diff);
 
   if (!total) {

@@ -46,11 +46,13 @@ export function isExcluded(key, patterns = []) {
  * Work out what applying `master` to `local` would change.
  * Both are states: { modules: {id: {title, version, active}}, settings: {key: rawJson} }
  * options.exclusions: glob patterns that the receiving world refuses
+ * options.sourceExclusions: glob patterns the master never pushes (its own list)
  * options.selfModuleId: this module's id (never disabled)
  * options.localSystem / master.source.system: used for warnings
  */
 export function diffStates(master, local, options = {}) {
   const exclusions = options.exclusions ?? [];
+  const sourceExclusions = options.sourceExclusions ?? [];
   const selfId = options.selfModuleId;
   const result = { modules: [], settings: [], skipped: [], warnings: [] };
 
@@ -104,7 +106,9 @@ export function diffStates(master, local, options = {}) {
       from: inL ? lRaw : null,
       to: inM ? mRaw : null
     };
-    if (matchesAny(key, exclusions)) result.skipped.push({ ...entry, type: "setting-excluded",
+    if (matchesAny(key, sourceExclusions)) result.skipped.push({ ...entry, type: "setting-master-excluded",
+      text: `${key} is on the master's "never push" list.` });
+    else if (matchesAny(key, exclusions)) result.skipped.push({ ...entry, type: "setting-excluded",
       text: `${key} differs but is on this world's exclusion list.` });
     else result.settings.push(entry);
   }

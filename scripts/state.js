@@ -42,9 +42,10 @@ export function localExclusions() {
   return parsePatterns(game.settings.get(MODULE_ID, "exclusions") ?? DEFAULT_EXCLUSIONS);
 }
 
-export function diffAgainstLocal(masterState) {
+export function diffAgainstLocal(masterState, sourceExclusions = []) {
   return diffStates(masterState, captureState(), {
     exclusions: localExclusions(),
+    sourceExclusions,
     selfModuleId: MODULE_ID,
     localSystem: { id: game.system.id, version: game.system.version }
   });

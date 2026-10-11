@@ -124,6 +124,7 @@ async function checkForPush() {
     title: `Apply push from ${latest.sourceWorldTitle ?? "master"}`,
     intro: latest.note ? `<p class="ahss-note-box"><strong>Note from the master:</strong> ${esc(latest.note)}</p>` : "",
     snapshotId: latest.id,
-    reason: `push ${latest.id}`
+    reason: `push ${latest.id}`,
+    sourceExclusions: snap.masterExclusions ?? []
   });
 }

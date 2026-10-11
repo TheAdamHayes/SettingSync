@@ -1,7 +1,7 @@
 // The main "AH Setting Sync" window.
 import { MODULE_ID, MODULE_TITLE, FORMAT, DEFAULT_EXCLUSIONS } from "./constants.js";
 import { diffStates, countChanges, parsePatterns } from "./sync-core.js";
-import { captureState, sendReport, settingLabel } from "./state.js";
+import { captureState, sendReport, settingLabel, localExclusions } from "./state.js";
 import { renderDiff, reviewAndApply, wireDialog, esc } from "./dialogs.js";
 import * as store from "./storage.js";
 
@@ -13,9 +13,10 @@ function fmtDate(iso) {
   return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
 }
 
-function diffForReport(masterState, report) {
+function diffForReport(masterState, report, sourceExclusions = []) {
   return diffStates(masterState, report.state ?? {}, {
     exclusions: report.exclusions ?? parsePatterns(DEFAULT_EXCLUSIONS),
+    sourceExclusions,
     selfModuleId: MODULE_ID,
     localSystem: report.state?.source?.system
   });
@@ -129,7 +130,7 @@ export class SyncApp extends ApplicationV2 {
         }
         let diffCell = "";
         if (isMaster && r.worldId !== game.world.id) {
-          const n = countChanges(diffForReport(live, r));
+          const n = countChanges(diffForReport(live, r, localExclusions()));
           diffCell = n ? `<a data-action="viewWorld" data-world="${esc(r.worldId)}">${n} change(s) — view</a>` : `<span class="ahss-good">In sync</span>`;
         }
         h.push(`<tr><td><strong>${esc(r.title)}</strong>${r.worldId === game.world.id ? " <em>(this world)</em>" : ""}
@@ -170,7 +171,7 @@ export class SyncApp extends ApplicationV2 {
       }
       let pullInfo = `<p class="ahss-none">The master world hasn't reported in yet, so there is nothing to pull. Open the master world once.</p>`;
       if (masterReport?.state) {
-        const n = countChanges(diffForReport(masterReport.state, { state: live, exclusions: parsePatterns(game.settings.get(MODULE_ID, "exclusions") ?? DEFAULT_EXCLUSIONS) }));
+        const n = countChanges(diffForReport(masterReport.state, { state: live, exclusions: localExclusions() }, masterReport.exclusions ?? []));
         pullInfo = `<p>The master's settings as of <strong>${esc(fmtDate(masterReport.lastSeen))}</strong>:
           ${n ? `<span class="ahss-pending">${n} difference(s) from this world</span>` : `<span class="ahss-good">this world already matches</span>`}</p>`;
       }
@@ -190,7 +191,9 @@ export class SyncApp extends ApplicationV2 {
     // ---- This world: exclusions + backups ----
     const exclusions = game.settings.get(MODULE_ID, "exclusions") ?? DEFAULT_EXCLUSIONS;
     h.push(`<section class="ahss-card">
-      <h2><i class="fa-solid fa-shield-halved"></i> This world: never overwrite</h2>
+      <h2><i class="fa-solid fa-shield-halved"></i> ${isMaster ? "Never push / never overwrite" : "This world: never overwrite"}</h2>
+      ${isMaster ? `<p class="ahss-note-box">This is the master, so these settings are also <strong>left out of every push and pull</strong> for all worlds.
+      Add a module's settings here once (e.g. <code>ddb-importer.*</code>) and no follower will receive them.</p>` : ""}
       <p class="ahss-hint">Settings matching these patterns are never changed in <strong>this</strong> world by a sync.
       One per line, <code>*</code> matches anything (e.g. <code>my-module.*</code> or <code>core.someSetting</code>).
       Users and player-specific settings are never synced, and neither are this module's own settings.</p>
@@ -250,7 +253,7 @@ async function onMakeMaster() {
 async function onViewWorld(event, target) {
   const r = this._ctx.reports[target.dataset.world];
   if (!r) return;
-  const diff = diffForReport(this._ctx.live, r);
+  const diff = diffForReport(this._ctx.live, r, localExclusions());
   await showReadOnly(`Pushing to ${r.title} would change…`,
     `<p class="ahss-hint">Based on ${esc(r.title)}'s last report (${esc(fmtDate(r.lastSeen))}), including its own exclusion list.</p>${renderDiff(diff)}`);
 }
@@ -295,7 +298,7 @@ async function onPush() {
   }
 
   const rows = targets.map(r => {
-    const diff = diffForReport(live, r);
+    const diff = diffForReport(live, r, localExclusions());
     const n = countChanges(diff);
     return `<li class="ahss-target">
       <label><input type="checkbox" name="ahss-item" value="${esc(r.worldId)}" ${n ? "checked" : ""}>
@@ -352,7 +355,7 @@ async function onPush() {
   try {
     const createdAt = new Date().toISOString();
     const id = `snap-${createdAt.replace(/[:.]/g, "-")}`;
-    const snapshot = { ...captureState(), id, kind: "snapshot", createdAt, createdBy: game.user.name, note: result.note, targets: result.ids };
+    const snapshot = { ...captureState(), id, kind: "snapshot", createdAt, createdBy: game.user.name, note: result.note, targets: result.ids, masterExclusions: localExclusions() };
     const file = await store.writeSnapshot(snapshot);
     const config = await store.readConfig();
     const entry = { id, file, createdAt, note: result.note, targets: result.ids, sourceWorldId: game.world.id, sourceWorldTitle: game.world.title };
@@ -379,7 +382,8 @@ async function onReviewLatest() {
       title: `Apply push from ${latest.sourceWorldTitle ?? "master"}`,
       intro: latest.note ? `<p class="ahss-note-box"><strong>Note from the master:</strong> ${esc(latest.note)}</p>` : "",
       snapshotId: latest.id,
-      reason: `push ${latest.id}`
+      reason: `push ${latest.id}`,
+      sourceExclusions: snap.masterExclusions ?? []
     });
   } catch (err) {
     console.error(err);
@@ -403,7 +407,8 @@ async function onPullMaster() {
       intro: `<p class="ahss-note-box">Pulling the current modules and settings of <strong>${esc(report.title)}</strong>
         (as of ${esc(fmtDate(report.lastSeen))}).</p>`,
       snapshotId: coversPush ? latest.id : null,
-      reason: `pull from ${masterId}`
+      reason: `pull from ${masterId}`,
+      sourceExclusions: report.exclusions ?? []
     });
   } catch (err) {
     console.error(err);
