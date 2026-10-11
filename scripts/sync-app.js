@@ -46,6 +46,7 @@ export class SyncApp extends ApplicationV2 {
       sinceLastPush: onSinceLastPush,
       push: onPush,
       reviewLatest: onReviewLatest,
+      pullMaster: onPullMaster,
       report: onReport,
       saveExclusions: onSaveExclusions,
       resetExclusions: onResetExclusions,
@@ -167,10 +168,22 @@ export class SyncApp extends ApplicationV2 {
             : included ? `<span class="ahss-pending"><i class="fa-solid fa-clock"></i> Not applied here yet</span>`
             : `<span class="ahss-muted">This world was not included in that push (you can still apply it).</span>`}</p>`;
       }
+      let pullInfo = `<p class="ahss-none">The master world hasn't reported in yet, so there is nothing to pull. Open the master world once.</p>`;
+      if (masterReport?.state) {
+        const n = countChanges(diffForReport(masterReport.state, { state: live, exclusions: parsePatterns(game.settings.get(MODULE_ID, "exclusions") ?? DEFAULT_EXCLUSIONS) }));
+        pullInfo = `<p>The master's settings as of <strong>${esc(fmtDate(masterReport.lastSeen))}</strong>:
+          ${n ? `<span class="ahss-pending">${n} difference(s) from this world</span>` : `<span class="ahss-good">this world already matches</span>`}</p>`;
+      }
       h.push(`<section class="ahss-card">
         <h2><i class="fa-solid fa-download"></i> Updates from the master</h2>
+        <h3 class="ahss-sub">Pushed by the master</h3>
         ${status}
-        ${fromMaster ? `<div class="ahss-row"><button type="button" data-action="reviewLatest" class="ahss-primary"><i class="fa-solid fa-list-check"></i> Review &amp; apply latest push…</button></div>` : ""}
+        ${fromMaster ? `<div class="ahss-row"><button type="button" data-action="reviewLatest"><i class="fa-solid fa-list-check"></i> Review &amp; apply latest push…</button></div>` : ""}
+        <h3 class="ahss-sub">Pull it yourself</h3>
+        <p class="ahss-hint">Copy the master's current modules and settings into this world now, without waiting for a push.
+        "Current" means the last time the master world was open (it reports itself whenever it's opened and whenever its settings change).</p>
+        ${pullInfo}
+        ${masterReport?.state ? `<div class="ahss-row"><button type="button" data-action="pullMaster" class="ahss-primary"><i class="fa-solid fa-cloud-arrow-down"></i> Pull master's current settings…</button></div>` : ""}
       </section>`);
     }
 
@@ -371,6 +384,30 @@ async function onReviewLatest() {
   } catch (err) {
     console.error(err);
     ui.notifications.error(`${MODULE_TITLE}: could not read the push (${err.message}).`);
+  }
+  this.render();
+}
+
+async function onPullMaster() {
+  try {
+    const [config, reports] = await Promise.all([store.readConfig(), store.readWorldReports()]);
+    const masterId = config.masterWorldId;
+    const report = reports[masterId];
+    if (!masterId || masterId === game.world.id) return ui.notifications.warn(`${MODULE_TITLE}: this world is the master, there's nothing to pull.`);
+    if (!report?.state) return ui.notifications.warn(`${MODULE_TITLE}: the master world hasn't reported in yet. Open it once first.`);
+    // If the master's report is newer than its latest push, the pull already includes that push.
+    const latest = config.latestSnapshot;
+    const coversPush = latest && latest.sourceWorldId === masterId && new Date(report.lastSeen) >= new Date(latest.createdAt);
+    await reviewAndApply(report.state, {
+      title: `Pull from ${report.title}`,
+      intro: `<p class="ahss-note-box">Pulling the current modules and settings of <strong>${esc(report.title)}</strong>
+        (as of ${esc(fmtDate(report.lastSeen))}).</p>`,
+      snapshotId: coversPush ? latest.id : null,
+      reason: `pull from ${masterId}`
+    });
+  } catch (err) {
+    console.error(err);
+    ui.notifications.error(`${MODULE_TITLE}: could not pull from the master (${err.message}).`);
   }
   this.render();
 }

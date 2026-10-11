@@ -86,3 +86,4 @@
 .ahss-ack { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.8rem; padding: 0.4rem 0.6rem; font-weight: bold;
   border: 1px solid #c98a1e; border-radius: 4px; background: rgba(201,138,30,.1); }
 .ahss-field { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.6rem 0; }
+.ahss-card h3.ahss-sub { font-size: 0.95rem; margin: 0.7rem 0 0.2rem; border: none; opacity: 0.9; }
