@@ -13,8 +13,9 @@ function fmtDate(iso) {
   return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
 }
 
-function diffForReport(masterState, report, sourceExclusions = []) {
+function diffForReport(masterState, report, sourceExclusions = [], fromReport = true) {
   return diffStates(masterState, report.state ?? {}, {
+    fromReport,
     exclusions: report.exclusions ?? parsePatterns(DEFAULT_EXCLUSIONS),
     sourceExclusions,
     selfModuleId: MODULE_ID,
@@ -171,7 +172,7 @@ export class SyncApp extends ApplicationV2 {
       }
       let pullInfo = `<p class="ahss-none">The master world hasn't reported in yet, so there is nothing to pull. Open the master world once.</p>`;
       if (masterReport?.state) {
-        const n = countChanges(diffForReport(masterReport.state, { state: live, exclusions: localExclusions() }, masterReport.exclusions ?? []));
+        const n = countChanges(diffForReport(masterReport.state, { state: live, exclusions: localExclusions() }, masterReport.exclusions ?? [], false));
         pullInfo = `<p>The master's settings as of <strong>${esc(fmtDate(masterReport.lastSeen))}</strong>:
           ${n ? `<span class="ahss-pending">${n} difference(s) from this world</span>` : `<span class="ahss-good">this world already matches</span>`}</p>`;
       }

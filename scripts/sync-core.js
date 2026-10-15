@@ -47,6 +47,9 @@ export function isExcluded(key, patterns = []) {
  * Both are states: { modules: {id: {title, version, active}}, settings: {key: rawJson} }
  * options.exclusions: glob patterns that the receiving world refuses
  * options.sourceExclusions: glob patterns the master never pushes (its own list)
+ * options.fromReport: `local` is a saved report (may be out of date), not the live world.
+ *   Modules missing from it are then shown as "enable" changes, because every world on one
+ *   Foundry/Forge install shares the same installed modules; the live check happens on apply.
  * options.selfModuleId: this module's id (never disabled)
  * options.localSystem / master.source.system: used for warnings
  */
@@ -65,6 +68,14 @@ export function diffStates(master, local, options = {}) {
     const title = m?.title ?? l?.title ?? id;
     if (id === selfId) continue;
     if (m && !l) {
+      if (m.active && options.fromReport) {
+        result.modules.push({
+          id: `module:${id}`, moduleId: id, title,
+          action: "enable", from: false, to: true, unverified: true,
+          versionNote: "not in this world's last report, probably installed since. It will be enabled if it's installed when the push is applied"
+        });
+        continue;
+      }
       if (m.active) result.warnings.push({
         type: "module-missing", id, title,
         text: `"${title}" is enabled on the master but is not installed here, so it can't be enabled.`
